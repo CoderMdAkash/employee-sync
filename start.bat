@@ -1,2 +1,2 @@
-cd /d D:\laragon\www\node\employee-sync
+cd /d D:\laragon\www\zkteco-data-sync\employee-sync
 node sync.js

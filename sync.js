@@ -1,8 +1,8 @@
 const axios = require('axios');
 
-const LOCAL_API = 'http://asl-website.test/migrate';
+const LOCAL_API = 'http://rahat-hostel-management.test/iclock/ping';
 
-const LIVE_API = 'http://asl-website.test/cache-clear';
+const LIVE_API = 'http://rahat-hostel-management.test/iclock/ping';
 
 async function syncEmployees() {
 
