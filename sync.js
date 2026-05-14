@@ -34,13 +34,19 @@ async function syncZktecoAttendenceData() {
 
             console.log(`[${getTime()}] Attendance Found:` + attendanceList.length);
 
-            // send data to server
-            const serverResponse = await sendDataServer(attendanceData);
+            if(attendanceList.length > 0) {
 
-            if (serverResponse) {
-                console.log(`[${getTime()}] Data sent to server successfully`);
-            } else {
-                console.log(`[${getTime()}] Failed to send data to server`);
+                // send data to server
+                const serverResponse = await sendDataServer(attendanceData);
+
+                if (serverResponse) {
+                    console.log(`[${getTime()}] Data sent to server successfully`);
+                } else {
+                    console.log(`[${getTime()}] Failed to send data to server`);
+                }
+                
+            }else {
+                console.log(`[${getTime()}] attendance data found 0 records, skipping send to server`);
             }
 
         } else {
