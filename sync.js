@@ -1,5 +1,6 @@
 const axios = require('axios');
 const { loadStoredToken, saveToken, clearStoredToken } = require('./tokenStore');
+const { loadLastAttendanceTime, saveLastAttendanceTime } = require('./attendanceCache');
 
 const DEVICE_BASE_URL = 'http://localhost:8088';
 const SERVER_BASE_URL = 'http://rahat-hostel-management.test';
@@ -10,6 +11,7 @@ const DEVICE_AUTH_PASSWORD = 'Rasidul.90';
 const SYNC_INTERVAL = 5000;
 let isSyncing = false;
 let DEVICE_TOKEN = loadStoredToken();
+let LAST_ATTENDANCE_TIME = loadLastAttendanceTime();
 
 async function syncZktecoAttendenceData() {
 
@@ -34,13 +36,16 @@ async function syncZktecoAttendenceData() {
 
             console.log(`[${getTime()}] Attendance Found:` + attendanceList.length);
 
-            if(attendanceList.length > 0) {
+            if (attendanceList.length > 0) {
 
                 // send data to server
                 const serverResponse = await sendDataServer(attendanceData);
 
                 if (serverResponse) {
                     console.log(`[${getTime()}] Data sent to server successfully`);
+
+                    updateLastAttendanceTime(attendanceData);
+
                 } else {
                     console.log(`[${getTime()}] Failed to send data to server`);
                 }
@@ -80,8 +85,14 @@ async function attendanceDataFetch(retry = true) {
     }
 
     try {
+        let url = DEVICE_BASE_URL + '/iclock/api/transactions/';
+        if (LAST_ATTENDANCE_TIME) {
+            url += `?start_time=${encodeURIComponent(LAST_ATTENDANCE_TIME)}`;
+            console.log(`[${getTime()}] Fetching attendance since ${LAST_ATTENDANCE_TIME}`);
+        }
+
         const response = await axios.get(
-            DEVICE_BASE_URL + '/iclock/api/transactions/',
+            url,
             {
                 headers: {
                     'Content-Type': 'application/json',
@@ -159,6 +170,31 @@ async function sendDataServer(data) {
     } catch (error) {
         console.log(`[${getTime()}] Data Send Failed`);
         return false;
+    }
+}
+
+function updateLastAttendanceTime(attendanceData) {
+    const attendanceList = Array.isArray(attendanceData.data) ? attendanceData.data : [];
+    const latestTime = attendanceList.reduce((latest, item) => {
+        const timeFields = ['timestamp', 'time', 'check_time', 'punch_time', 'datetime', 'date', 'created_at', 'updated_at'];
+        for (const field of timeFields) {
+            if (item[field]) {
+                const value = item[field];
+                const currentDate = latest ? new Date(latest) : null;
+                const nextDate = new Date(value);
+                if (!latest || nextDate > currentDate) {
+                    return value;
+                }
+                break;
+            }
+        }
+        return latest;
+    }, '');
+
+    if (latestTime) {
+        LAST_ATTENDANCE_TIME = latestTime;
+        saveLastAttendanceTime(latestTime);
+        console.log(`[${getTime()}] Updated last attendance time from device: ${latestTime}`);
     }
 }
 
