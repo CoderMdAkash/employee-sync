@@ -7,6 +7,7 @@ const SERVER_BASE_URL = 'http://rahat-hostel-management.test';
 const SERVER_AUTH_TOKEN = 'your_server_auth_token_here';
 const DEVICE_AUTH_USERNAME = 'admin';
 const DEVICE_AUTH_PASSWORD = 'Rasidul.90';
+const DEVICE_NAME = 'DEVICE_001';
 
 const SYNC_INTERVAL = 5000;
 let isSyncing = false;
@@ -155,7 +156,7 @@ async function loginDevice() {
 async function sendDataServer(data) {
     try {
         const response = await axios.get(
-            SERVER_BASE_URL + '/iclock/ping',
+            SERVER_BASE_URL + '/iclock/ping?device_name=' + DEVICE_NAME,
             data,
             {
                 headers: {
