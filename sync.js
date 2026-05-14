@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { loadStoredToken, saveToken, clearStoredToken } = require('./tokenStore');
 
 const DEVICE_BASE_URL = 'http://localhost:8088';
 const SERVER_BASE_URL = 'http://rahat-hostel-management.test';
@@ -8,7 +9,7 @@ const DEVICE_AUTH_PASSWORD = 'Rasidul.90';
 
 const SYNC_INTERVAL = 5000;
 let isSyncing = false;
-let DEVICE_TOKEN = '';
+let DEVICE_TOKEN = loadStoredToken();
 
 async function syncZktecoAttendenceData() {
 
@@ -22,17 +23,20 @@ async function syncZktecoAttendenceData() {
 
     try {
 
-        console.log(`\n[${getTime()}] Device Sync Started `+DEVICE_TOKEN);
+        console.log(`\n[${getTime()}] Device Sync Started`);
 
         // fetch attendance data
         const attendanceData = await attendanceDataFetch();
 
         if (attendanceData) {
 
-            console.log(`[${getTime()}] Attendance Found:`, attendanceData);
+            const attendanceList = attendanceData.data;
+
+            console.log(`[${getTime()}] Attendance Found:` + attendanceList.length);
 
             // send data to server
             const serverResponse = await sendDataServer(attendanceData);
+
             if (serverResponse) {
                 console.log(`[${getTime()}] Data sent to server successfully`);
             } else {
@@ -62,8 +66,14 @@ async function syncZktecoAttendenceData() {
 
 
 async function attendanceDataFetch(retry = true) {
-    try {
+    if (!DEVICE_TOKEN) {
+        const loggedIn = await loginDevice();
+        if (!loggedIn) {
+            return false;
+        }
+    }
 
+    try {
         const response = await axios.get(
             DEVICE_BASE_URL + '/iclock/api/transactions/',
             {
@@ -78,7 +88,18 @@ async function attendanceDataFetch(retry = true) {
         return response.data;
 
     } catch (error) {
-        console.log(`[${getTime()}] Transaction Fetch Failed`);
+        const isUnauthorized = error.response && error.response.status === 401;
+        if (isUnauthorized && retry) {
+            console.log(`[${getTime()}] Token invalid or expired, re-authenticating...`);
+            DEVICE_TOKEN = '';
+            clearStoredToken();
+            const loggedIn = await loginDevice();
+            if (loggedIn) {
+                return attendanceDataFetch(false);
+            }
+        }
+
+        console.log(`[${getTime()}] Transaction Fetch Failed`, error.message);
         return false;
     }
 }
@@ -101,6 +122,7 @@ async function loginDevice() {
 
         console.log('Login Success', res.data.token);
 
+        saveToken(res.data.token);
         DEVICE_TOKEN = res.data.token;
 
         return true;
