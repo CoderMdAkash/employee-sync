@@ -14,85 +14,82 @@ let isSyncing = false;
 let DEVICE_TOKEN = loadStoredToken();
 let LAST_ATTENDANCE_TIME = loadLastAttendanceTime();
 
-// const EMPLOYEE_SYNC_INTERVAL = 2 * 60 * 1000; // 2 minutes
-const EMPLOYEE_SYNC_INTERVAL = 2000; // 2 minutes
+const EMPLOYEE_SYNC_INTERVAL = 2 * 60 * 1000; // 2 minutes
+// const EMPLOYEE_SYNC_INTERVAL = 4000;
 let isEmployeeSyncing = false;
 
-async function syncZktecoAttendenceData() {
+
+// ==================================================================
+// sync attendance data device to server start
+// ==================================================================
+
+async function syncZktecoAttendenceDataToServer() {
 
     // prevent overlapping sync
     if (isSyncing) {
-        console.log(`[${getTime()}] Previous sync still running...`);
+        console.log(`[${getTime()}] Sync skipped: previous sync still running`);
         return;
     }
 
     isSyncing = true;
 
+    console.log(`\n[${getTime()}] ==============================`);
+    console.log(`[${getTime()}] Device Sync Started`);
+
     try {
+        // fetch attendance
+        const attendanceData = await attendanceDataFetchFromDevice();
 
-        console.log(`\n[${getTime()}] Device Sync Started`);
+        console.log(`[${getTime()}] Attendance Found:` + attendanceData.data.length);
 
-        // fetch attendance data
-        const attendanceData = await attendanceDataFetch();
+        if (attendanceData && attendanceData.data && attendanceData.data.length > 0) {
 
-        if (attendanceData) {
+            // send data to server
+            const serverResponse = await sendEmployeeAttendanceDataServer(attendanceData);
 
-            const attendanceList = attendanceData.data;
+            if (serverResponse) {
+                console.log(`[${getTime()}] Data sent to server successfully`);
 
-            console.log(`[${getTime()}] Attendance Found:` + attendanceList.length);
+                await updateLastAttendanceTime(attendanceData);
 
-            if (attendanceList.length > 0) {
-
-                // send data to server
-                const serverResponse = await sendDataServer(attendanceData);
-
-                if (serverResponse) {
-                    console.log(`[${getTime()}] Data sent to server successfully`);
-
-                    updateLastAttendanceTime(attendanceData);
-
-                } else {
-                    console.log(`[${getTime()}] Failed to send data to server`);
-                }
+            } else {
+                console.log(`[${getTime()}] Failed to send data to server`);
+            }
                 
-            }else {
-                console.log(`[${getTime()}] attendance data found 0 records, skipping send to server`);
-            }
-
         } else {
-            console.log(`[${getTime()}] No attendance data found`);
-
-            const login = await loginDevice();
-
-            if (login) {
-                syncZktecoAttendenceData();
-            }
+            console.log(`[${getTime()}] No new attendance data found on device`);
         }
 
-        console.log(`[${getTime()}] Device Sync Completed`);
+        return;
 
     } catch (error) {
         console.log(`[${getTime()}] Device Sync Failed`);
     } finally {
-        // always release lock
+        console.log(`[${getTime()}] Device Sync Completed`);
+        console.log(`[${getTime()}] ==============================\n`);
+
         isSyncing = false;
 
     }
 }
 
 
-async function attendanceDataFetch(retry = true) {
-    if (!DEVICE_TOKEN) {
-        const loggedIn = await loginDevice();
-        if (!loggedIn) {
-            return false;
-        }
-    }
-
+async function attendanceDataFetchFromDevice(retry = true) {
+    
     try {
+        // if not logged in, try to login first
+        if (!DEVICE_TOKEN) {
+            const loggedIn = await loginDevice();
+            if (!loggedIn) {
+                return false;
+            }
+        }
+
+        // attendance data fetch from device with optional last attendance time filter
         let url = DEVICE_BASE_URL + '/iclock/api/transactions/';
         if (LAST_ATTENDANCE_TIME) {
             url += `?start_time=${encodeURIComponent(LAST_ATTENDANCE_TIME)}`;
+
             console.log(`[${getTime()}] Fetching attendance since ${LAST_ATTENDANCE_TIME}`);
         }
 
@@ -119,7 +116,7 @@ async function attendanceDataFetch(retry = true) {
             const loggedIn = await loginDevice();
 
             if (loggedIn) {
-                return attendanceDataFetch(false);
+                return attendanceDataFetchFromDevice(false);
             }
         }
 
@@ -127,6 +124,226 @@ async function attendanceDataFetch(retry = true) {
         return false;
     }
 }
+
+
+// send data to server
+async function sendEmployeeAttendanceDataServer(data) {
+    try {
+
+        const params = new URLSearchParams({
+            device_name: DEVICE_NAME,
+            device_token: SERVER_AUTH_TOKEN
+        });
+
+        const response = await axios.post(
+            `${SERVER_BASE_URL}/api/zkteco/attendance-records?${params.toString()}`,
+            data,
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                timeout: 5000
+            }
+        );
+
+        return response.data;
+
+    } catch (error) {
+        console.log(`[${getTime()}] Attendance Data Send to server Failed`, error.message);
+
+        return false;
+    }
+}
+
+
+// ==================================================================
+// sync attendance data device to server end
+// ==================================================================
+
+
+// ==================================================================
+// sync new employee data server to device start
+// ==================================================================
+
+async function syncEmployeeDataFromServer() {
+
+    // prevent overlapping sync
+    if (isEmployeeSyncing) {
+        console.log(`[${getTime()}] Previous employee sync from server is still running...`);
+        return;
+    }
+
+    isEmployeeSyncing = true;
+
+    try {
+
+        console.log(`\n[${getTime()}] ==============================`);
+        console.log(`[${getTime()}] Employee Sync Started`);
+
+        // fetch employee data
+        const employeeData = await newEmployeeDataFetchServer();
+
+        console.log(`[${getTime()}] Employee Data Found: ${employeeData && employeeData.data ? employeeData.data.length : 0}`);
+
+        if (employeeData && employeeData.data && employeeData.data.length > 0) {
+
+            // send data to device
+            const deviceResponse = await sendEmployeeDataDevice(employeeData);
+            const statusUpdate = await employeeStatusUpdateServer(employeeData);
+
+            return deviceResponse.data;
+
+        } else {
+            console.log(`[${getTime()}] No employee data found`);
+        }
+
+    } catch (error) {
+        console.log(`[${getTime()}] Employee Sync Failed`, error.message);
+    } finally {
+        console.log(`[${getTime()}] Employee data sent to device successfully`);
+
+        // always release lock
+        isEmployeeSyncing = false;
+    }
+}
+
+// fetch employee data from device
+async function newEmployeeDataFetchServer() {
+    try {
+        let url = SERVER_BASE_URL + '/api/zkteco/device-employees?device_name=' + DEVICE_NAME+'&device_token=' + SERVER_AUTH_TOKEN;
+        
+        const response = await axios.get(
+            url,
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                timeout: 5000
+            }
+        );
+
+        if(response.data){
+            return response.data;
+        }else{
+            return false;
+        }
+
+    } catch (error) {
+        console.log(`[${getTime()}] Employee Data Fetch Failed`, error.message);
+        return false;
+    }
+}
+
+// send employee data to device
+async function sendEmployeeDataDevice(data, retry = true) {
+    
+    try {
+        const areas = await syncDeviceAreas();
+
+        console.log(`[${getTime()}] Device areas fetched: `, areas.data.length);
+
+        if(!areas.data && areas.data.length == 0){
+            return false;
+        }
+
+        const response = await axios.post(
+            SERVER_BASE_URL + '/personnel/api/employees/',
+            data,
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Token ' + DEVICE_TOKEN
+                },
+                timeout: 5000
+            }
+        );
+
+        return response.data;
+
+    } catch (error) {
+
+        console.log(`[${getTime()}] Employee Data Send to device Failed`, error.message);
+
+        const isUnauthorized = error.response && error.response.status === 401;
+        if (isUnauthorized && retry) {
+            console.log(`[${getTime()}] Token invalid or expired, re-authenticating...`);
+
+            DEVICE_TOKEN = '';
+            clearStoredToken();
+            const loggedIn = await loginDevice();
+
+            if (loggedIn) {
+                return sendEmployeeDataDevice(data, false);
+            }
+        }
+        
+        return false;
+    }
+}
+
+async function employeeStatusUpdateServer(data) {
+    try {
+
+        const statusUpdate = await axios.post(
+            SERVER_BASE_URL + '/api/zkteco/update-employee-sync-status?id=' + data,
+            { device_name: DEVICE_NAME, device_token: SERVER_AUTH_TOKEN },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                timeout: 5000
+            }
+        );
+
+        return statusUpdate.data;
+
+    } catch (error) {
+        console.log(`[${getTime()}] Employee Sync Status Update Failed`, error.message);
+        return false;
+    }
+}
+
+async function syncDeviceAreas(retry = true) {
+    try {
+        const response = await axios.get(
+            DEVICE_BASE_URL + '/personnel/api/areas/',
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Token ' + DEVICE_TOKEN
+                },
+                timeout: 5000
+            }
+        );
+
+        return response.data || [];
+    } catch (error) {
+        console.log(`[${getTime()}] Employee Data Fetch Failed`, error.message);
+
+        const isUnauthorized = error.response && error.response.status === 401;
+        if (isUnauthorized && retry) {
+            console.log(`[${getTime()}] Token invalid or expired, re-authenticating...`);
+
+            DEVICE_TOKEN = '';
+            clearStoredToken();
+            const loggedIn = await loginDevice();
+
+            if (loggedIn) {
+                return syncDeviceAreas(false);
+            }
+        }
+
+        return [];
+    }
+}
+
+
+// ==================================================================
+// sync employee data server to device end
+// ==================================================================
+
+
+/// Helper: Login to device and get token
 
 async function loginDevice() {
     try {
@@ -158,196 +375,7 @@ async function loginDevice() {
 }
 
 
-// send data to server
-async function sendDataServer(data) {
-    try {
-
-        const params = new URLSearchParams({
-            device_name: DEVICE_NAME,
-            device_token: SERVER_AUTH_TOKEN
-        });
-
-        const response = await axios.post(
-            `${SERVER_BASE_URL}/api/zkteco/attendance-records?${params.toString()}`,
-            data,
-            {
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                timeout: 5000
-            }
-        );
-
-        console.log(`[${getTime()}] Data Sent to Server`, response.data);
-
-        return response.data;
-
-    } catch (error) {
-
-        console.log(`[${getTime()}] Data Send Failed`);
-
-        // Better debugging
-        if (error.response) {
-            console.log('Server Error:', error.response.status);
-            console.log(error.response.data);
-        } else if (error.request) {
-            console.log('No Response From Server');
-        } else {
-            console.log(error.message);
-        }
-
-        return false;
-    }
-}
-
-// fetch employee data from device
-async function employeeDataFetchServer() {
-    try {
-        let url = SERVER_BASE_URL + '/api/zkteco/device-employees?device_name=' + DEVICE_NAME+'&device_token=' + SERVER_AUTH_TOKEN;
-        
-        console.log(`[${getTime()}] Fetching employee data from device`);
-
-        const response = await axios.get(
-            url,
-            {
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                timeout: 5000
-            }
-        );
-
-        if(response.data){
-            await sendEmployeeDataDevice(response.data);
-            return response.data;
-        }
-
-        return false;
-
-    } catch (error) {
-        console.log(`[${getTime()}] Employee Data Fetch Failed`, error.message);
-        return false;
-    }
-}
-
-// send employee data to device
-async function sendEmployeeDataDevice(data) {
-    
-    try {
-        const areas = await syncDeviceAreas();
-
-        console.log(`[${getTime()}] Device areas fetched: `, areas.data.length);
-
-        if(!areas.data && areas.data.length == 0){
-            return false;
-        }
-
-        const response = await axios.post(
-            SERVER_BASE_URL + '/personnel/api/employees/',
-            data,
-            {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Token ' + DEVICE_TOKEN
-                },
-                timeout: 5000
-            }
-        );
-
-        return response.data;
-    } catch (error) {
-        console.log(`[${getTime()}] Employee Data Send to device Failed`, error.message);
-        
-        return false;
-    }
-}
-
-// sync employee data
-async function syncEmployeeData() {
-    // prevent overlapping sync
-    if (isEmployeeSyncing) {
-        console.log(`[${getTime()}] Previous employee sync still running...`);
-        return;
-    }
-
-    isEmployeeSyncing = true;
-
-    try {
-
-        console.log(`\n[${getTime()}] Employee Sync Started`);
-
-        // fetch employee data
-        const employeeData = await employeeDataFetchServer();
-
-        if (employeeData) {
-
-            const employeeList = employeeData.data || [];
-
-            console.log(`[${getTime()}] Employees Found: ${employeeList.length}`);
-
-            if (employeeList.length > 0) {
-
-                // send data to device
-                const deviceResponse = await sendEmployeeDataDevice(employeeData);
-
-                if (deviceResponse) {
-                    console.log(`[${getTime()}] Employee data sent to device successfully`);
-                } else {
-                    console.log(`[${getTime()}] Failed to send employee data to device`);
-                }
-                
-            } else {
-                console.log(`[${getTime()}] Employee data found 0 records, skipping send to device`);
-            }
-
-        } else {
-            console.log(`[${getTime()}] No employee data found`);
-
-            const login = await loginDevice();
-
-            if (login) {
-                syncEmployeeData();
-            }
-        }
-
-        console.log(`[${getTime()}] Employee Sync Completed`);
-
-    } catch (error) {
-        console.log(`[${getTime()}] Employee Sync Failed`, error.message);
-    } finally {
-        // always release lock
-        isEmployeeSyncing = false;
-
-    }
-}
-
-async function syncDeviceAreas(retry = true) {
-    try {
-        const response = await axios.get(
-            DEVICE_BASE_URL + '/personnel/api/areas/',
-            {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Token ' + DEVICE_TOKEN
-                },
-                timeout: 5000
-            }
-        );
-
-        return response.data || [];
-    } catch (error) {
-        console.log(`[${getTime()}] Employee Data Fetch Failed`, error.message);
-
-        if (retry) {
-            await loginDevice();
-            const areasData = await syncDeviceAreas(false);
-            return areasData.data || [];
-        }
-
-        return [];
-    }
-}
-
+/// Helpers:
 
 function updateLastAttendanceTime(attendanceData) {
     const attendanceList = Array.isArray(attendanceData.data) ? attendanceData.data : [];
@@ -379,10 +407,14 @@ function getTime() {
     return new Date().toLocaleString();
 }
 
+// =================================================================
+// loop to sync data start
+// =================================================================
+
 // Infinite Sync Loop
 async function startAttendanceSyncLoop() {
     try {
-        await syncZktecoAttendenceData();
+        await syncZktecoAttendenceDataToServer();
     } catch (error) {
         console.log('Attendance Loop Error:', error.message);
     } finally {
@@ -393,7 +425,7 @@ async function startAttendanceSyncLoop() {
 // Employee Sync Loop (every 2 minutes)
 async function startEmployeeSyncLoop() {
     try {
-        await employeeDataFetchServer();
+        await syncEmployeeDataFromServer();
     } catch (error) {
         console.log('Employee Loop Error:', error.message);
     } finally {
@@ -401,5 +433,9 @@ async function startEmployeeSyncLoop() {
     }
 }
 
-startAttendanceSyncLoop();
+// startAttendanceSyncLoop();
 startEmployeeSyncLoop();
+
+// =================================================================
+// loop to sync data end
+// =================================================================
