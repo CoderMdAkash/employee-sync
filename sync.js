@@ -202,6 +202,7 @@ async function syncEmployeeDataFromServer() {
         console.log(`[${getTime()}] Employee Sync Failed`, error.message);
     } finally {
         console.log(`[${getTime()}] Employee data sent to device successfully`);
+        console.log(`[${getTime()}] ==============================\n`);
 
         // always release lock
         isEmployeeSyncing = false;
