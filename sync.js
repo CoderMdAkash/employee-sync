@@ -375,7 +375,7 @@ async function loginDevice() {
 }
 
 
-/// Helpers:
+/// Helper: Update last attendance time based on latest record from device and save to cache
 
 function updateLastAttendanceTime(attendanceData) {
     const attendanceList = Array.isArray(attendanceData.data) ? attendanceData.data : [];
