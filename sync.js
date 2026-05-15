@@ -203,7 +203,7 @@ async function sendDataServer(data) {
 // fetch employee data from device
 async function employeeDataFetchServer() {
     try {
-        let url = SERVER_BASE_URL + '/zkteco/sync-employees?device_name=' + DEVICE_NAME+'&device_token=' + DEVICE_TOKEN;
+        let url = SERVER_BASE_URL + '/api/zkteco/device-employees?device_name=' + DEVICE_NAME+'&device_token=' + SERVER_AUTH_TOKEN;
         
         console.log(`[${getTime()}] Fetching employee data from device`);
 
@@ -242,8 +242,6 @@ async function sendEmployeeDataDevice(data) {
             return false;
         }
 
-        return true;
-
         const response = await axios.post(
             SERVER_BASE_URL + '/personnel/api/employees/',
             data,
@@ -258,7 +256,7 @@ async function sendEmployeeDataDevice(data) {
 
         return response.data;
     } catch (error) {
-        console.log(`[${getTime()}] Employee Data Send Failed`, error.message);
+        console.log(`[${getTime()}] Employee Data Send to device Failed`, error.message);
         
         return false;
     }
