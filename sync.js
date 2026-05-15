@@ -9,13 +9,14 @@ const DEVICE_AUTH_USERNAME = 'admin';
 const DEVICE_AUTH_PASSWORD = 'Rasidul.90';
 const DEVICE_NAME = 'DEVICE_001';
 
-const SYNC_INTERVAL = 5000;
+const SYNC_INTERVAL = 2 * 60 * 1000; // 2 minutes
+// const SYNC_INTERVAL = 5000; // for testing
 let isSyncing = false;
 let DEVICE_TOKEN = loadStoredToken();
 let LAST_ATTENDANCE_TIME = loadLastAttendanceTime();
 
 const EMPLOYEE_SYNC_INTERVAL = 2 * 60 * 1000; // 2 minutes
-// const EMPLOYEE_SYNC_INTERVAL = 4000;
+// const EMPLOYEE_SYNC_INTERVAL = 5000; // for testing
 let isEmployeeSyncing = false;
 
 
