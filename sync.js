@@ -10,13 +10,13 @@ const DEVICE_AUTH_PASSWORD = 'Rasidul.90';
 const DEVICE_NAME = 'DEVICE_001';
 
 const SYNC_INTERVAL = 2 * 60 * 1000; // 2 minutes
-// const SYNC_INTERVAL = 5000; // for testing
+// const SYNC_INTERVAL = 8000; // for testing
 let isSyncing = false;
 let DEVICE_TOKEN = loadStoredToken();
 let LAST_ATTENDANCE_TIME = loadLastAttendanceTime();
 
 const EMPLOYEE_SYNC_INTERVAL = 2 * 60 * 1000; // 2 minutes
-// const EMPLOYEE_SYNC_INTERVAL = 5000; // for testing
+// const EMPLOYEE_SYNC_INTERVAL = 8000; // for testing
 let isEmployeeSyncing = false;
 
 
@@ -101,7 +101,7 @@ async function attendanceDataFetchFromDevice(retry = true) {
                     'Content-Type': 'application/json',
                     'Authorization': 'Token ' + DEVICE_TOKEN
                 },
-                timeout: 5000
+                timeout: 8000
             }
         );
 
@@ -143,7 +143,7 @@ async function sendEmployeeAttendanceDataServer(data) {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                timeout: 5000
+                timeout: 8000
             }
         );
 
@@ -184,15 +184,20 @@ async function syncEmployeeDataFromServer() {
         // fetch employee data
         const employeeData = await newEmployeeDataFetchServer();
 
-        console.log(`[${getTime()}] Employee Data Found: ${employeeData && employeeData.data ? employeeData.data.length : 0}`);
+        console.log(`[${getTime()}] Employee Data Found: ${employeeData ? 'Found' : 'Not Found'}`);
 
-        if (employeeData && employeeData.data && employeeData.data.length > 0) {
+        if (employeeData) {
 
             // send data to device
             const deviceResponse = await sendEmployeeDataDevice(employeeData);
-            const statusUpdate = await employeeStatusUpdateServer(employeeData);
 
-            return deviceResponse.data;
+            if(deviceResponse){
+                const statusUpdate = await employeeStatusUpdateServer(employeeData.id);
+
+                return deviceResponse.data;
+            }else{
+                console.log(`[${getTime()}] Failed to send employee data to device`);
+            }
 
         } else {
             console.log(`[${getTime()}] No employee data found`);
@@ -212,7 +217,7 @@ async function syncEmployeeDataFromServer() {
 // fetch employee data from device
 async function newEmployeeDataFetchServer() {
     try {
-        let url = SERVER_BASE_URL + '/api/zkteco/device-employees?device_name=' + DEVICE_NAME+'&device_token=' + SERVER_AUTH_TOKEN;
+        let url = SERVER_BASE_URL + '/api/zkteco/device-employee?device_name=' + DEVICE_NAME+'&device_token=' + SERVER_AUTH_TOKEN;
         
         const response = await axios.get(
             url,
@@ -220,12 +225,12 @@ async function newEmployeeDataFetchServer() {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                timeout: 5000
+                timeout: 8000
             }
         );
 
         if(response.data){
-            return response.data;
+            return response.data.employee || false;
         }else{
             return false;
         }
@@ -242,25 +247,36 @@ async function sendEmployeeDataDevice(data, retry = true) {
     try {
         const areas = await syncDeviceAreas();
 
-        console.log(`[${getTime()}] Device areas fetched: `, areas.data.length);
+        const areaIds = areas.data
+            .filter(area => area.id !== 1)
+            .map(area => area.id);
 
-        if(!areas.data && areas.data.length == 0){
-            return false;
-        }
+        console.log(`[${getTime()}] Device AreaIds fetched: `, areaIds);
+
+        const DeviceData = {
+            emp_code: data.emp_code,
+            department: 1,
+            area: areaIds,
+            first_name: data.name,
+        };
 
         const response = await axios.post(
-            SERVER_BASE_URL + '/personnel/api/employees/',
-            data,
+            DEVICE_BASE_URL + '/personnel/api/employees/',
+            DeviceData,
             {
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': 'Token ' + DEVICE_TOKEN
                 },
-                timeout: 5000
+                timeout: 8000
             }
         );
 
-        return response.data;
+        if(response.data){
+            return response.data;
+        }else{
+            return false;
+        }
 
     } catch (error) {
 
@@ -283,17 +299,17 @@ async function sendEmployeeDataDevice(data, retry = true) {
     }
 }
 
-async function employeeStatusUpdateServer(data) {
+async function employeeStatusUpdateServer(employeeId) {
     try {
 
         const statusUpdate = await axios.post(
-            SERVER_BASE_URL + '/api/zkteco/update-employee-sync-status?id=' + data,
+            SERVER_BASE_URL + '/api/zkteco/update-employee-sync-status?id=' + employeeId,
             { device_name: DEVICE_NAME, device_token: SERVER_AUTH_TOKEN },
             {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                timeout: 5000
+                timeout: 8000
             }
         );
 
@@ -314,7 +330,7 @@ async function syncDeviceAreas(retry = true) {
                     'Content-Type': 'application/json',
                     'Authorization': 'Token ' + DEVICE_TOKEN
                 },
-                timeout: 5000
+                timeout: 8000
             }
         );
 
@@ -359,7 +375,7 @@ async function loginDevice() {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                timeout: 5000
+                timeout: 8000
             }
         );
 
@@ -435,7 +451,7 @@ async function startEmployeeSyncLoop() {
     }
 }
 
-startAttendanceSyncLoop();
+// startAttendanceSyncLoop();
 startEmployeeSyncLoop();
 
 // =================================================================
