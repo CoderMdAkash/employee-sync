@@ -451,7 +451,7 @@ async function startEmployeeSyncLoop() {
     }
 }
 
-// startAttendanceSyncLoop();
+startAttendanceSyncLoop();
 startEmployeeSyncLoop();
 
 // =================================================================
