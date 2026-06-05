@@ -3,7 +3,7 @@ const { loadStoredToken, saveToken, clearStoredToken } = require('./tokenStore')
 const { loadLastAttendanceTime, saveLastAttendanceTime } = require('./attendanceCache');
 
 const DEVICE_BASE_URL = 'http://localhost:8088';
-const SERVER_BASE_URL = 'http://localhost:8000';
+const SERVER_BASE_URL = 'https://hrm.softgio.com';
 const SERVER_AUTH_TOKEN = 'C8ETIujeBGeRv2DSlrfMjXHD7OVXG';
 const DEVICE_AUTH_USERNAME = 'admin';
 const DEVICE_AUTH_PASSWORD = 'Rasidul.90';
